@@ -1,0 +1,31 @@
+/* CSS Reset (minimal) */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  touch-action: none; /* disable browser gesture handling */
+  overscroll-behavior: none;
+  background: #05050A;
+}
+
+body {
+  position: fixed; /* helps prevent mobile scroll bounce */
+  inset: 0;
+}
+
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  background: #05050A;
+}
