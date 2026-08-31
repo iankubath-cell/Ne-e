@@ -18,14 +18,14 @@ export class SynthEngine {
       this.ctx = new AC();
 
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
+      this.master.gain.value = 0.35;
       this.master.connect(this.ctx.destination);
 
       this.delay = this.ctx.createDelay(1.0);
-      this.delay.delayTime.value = 0.28;
+      this.delay.delayTime.value = 0.4;
 
       this.feedback = this.ctx.createGain();
-      this.feedback.gain.value = 0.35;
+      this.feedback.gain.value = 0.22;
 
       this.delay.connect(this.master);
       this.delay.connect(this.feedback);
@@ -104,21 +104,39 @@ export class SynthEngine {
     const env = ctx.createGain();
     env.gain.cancelScheduledValues(now);
     env.gain.setValueAtTime(0.0001, now);
-    env.gain.linearRampToValueAtTime(0.22 * vel, now + 0.04); // hold after attack
+    env.gain.linearRampToValueAtTime(0.14 * vel, now + 0.1); // hold after attack
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(1200, now);
+    filter.Q.setValueAtTime(0.7, now);
 
     const osc1 = ctx.createOscillator();
     osc1.type = "sine";
     osc1.frequency.setValueAtTime(freq, now);
 
     const osc2 = ctx.createOscillator();
-    osc2.type = "triangle";
-    osc2.frequency.setValueAtTime(freq * 2, now);
-    osc2.detune.setValueAtTime(4, now);
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(freq * 0.5, now);
+
+    const vibratoLfo = ctx.createOscillator();
+    vibratoLfo.type = "sine";
+    vibratoLfo.frequency.setValueAtTime(5.5, now);
+
+    const vibratoDepth = ctx.createGain();
+    vibratoDepth.gain.setValueAtTime(0, now);
+    vibratoDepth.gain.linearRampToValueAtTime(4, now + 0.5);
+
+    vibratoLfo.connect(vibratoDepth);
+    vibratoDepth.connect(osc1.detune);
+    vibratoDepth.connect(osc2.detune);
+    vibratoLfo.start(now);
 
     osc1.connect(env);
     osc2.connect(env);
-    env.connect(this.master);
-    env.connect(this.delay);
+    env.connect(filter);
+    filter.connect(this.master);
+    filter.connect(this.delay);
 
     osc1.start(now);
     osc2.start(now);
@@ -127,6 +145,9 @@ export class SynthEngine {
       osc1,
       osc2,
       env,
+      filter,
+      vibratoLfo,
+      vibratoDepth,
       freq,
       startTime: now,
       released: false,
@@ -141,6 +162,7 @@ export class SynthEngine {
       if (ended >= 2) {
         try {
           env.disconnect();
+          filter.disconnect();
         } catch {}
       }
     };
@@ -154,7 +176,7 @@ export class SynthEngine {
       const t = ctx.currentTime;
 
       voice.osc1.frequency.setTargetAtTime(tf, t, tc);
-      voice.osc2.frequency.setTargetAtTime(tf * 2, t, tc);
+      voice.osc2.frequency.setTargetAtTime(tf * 0.5, t, tc);
       voice.freq = tf;
     };
 
@@ -165,10 +187,11 @@ export class SynthEngine {
       const t = ctx.currentTime;
       voice.env.gain.cancelScheduledValues(t);
       voice.env.gain.setValueAtTime(Math.max(0.0001, voice.env.gain.value), t);
-      voice.env.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+      voice.env.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
 
       voice.osc1.stop(t + 1.2);
       voice.osc2.stop(t + 1.2);
+      voice.vibratoLfo.stop(t + 1.2);
     };
 
     voice.kill = () => {
@@ -182,6 +205,7 @@ export class SynthEngine {
 
       voice.osc1.stop(t + 0.06);
       voice.osc2.stop(t + 0.06);
+      voice.vibratoLfo.stop(t + 0.06);
     };
 
     return voice;
