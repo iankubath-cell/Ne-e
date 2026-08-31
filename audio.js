@@ -18,7 +18,7 @@ export class SynthEngine {
       this.ctx = new AC();
 
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.35;
+      this.master.gain.value = 0.45;
       this.master.connect(this.ctx.destination);
 
       this.delay = this.ctx.createDelay(1.0);
@@ -104,11 +104,12 @@ export class SynthEngine {
     const env = ctx.createGain();
     env.gain.cancelScheduledValues(now);
     env.gain.setValueAtTime(0.0001, now);
-    env.gain.linearRampToValueAtTime(0.14 * vel, now + 0.1); // hold after attack
+    env.gain.linearRampToValueAtTime(0.18 * vel, now + 0.1); // hold after attack
 
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(1200, now);
+    const cutoff = 600 + freq * 2.5; // low notes: ~780 Hz, high notes: ~2700 Hz
+    filter.frequency.setValueAtTime(cutoff, now);
     filter.Q.setValueAtTime(0.7, now);
 
     const osc1 = ctx.createOscillator();
@@ -118,6 +119,10 @@ export class SynthEngine {
     const osc2 = ctx.createOscillator();
     osc2.type = "sine";
     osc2.frequency.setValueAtTime(freq * 0.5, now);
+
+    const osc3 = ctx.createOscillator();
+    osc3.type = "triangle";
+    osc3.frequency.setValueAtTime(freq * 3, now); // third harmonic — fills midrange on low notes
 
     const vibratoLfo = ctx.createOscillator();
     vibratoLfo.type = "sine";
@@ -134,16 +139,19 @@ export class SynthEngine {
 
     osc1.connect(env);
     osc2.connect(env);
+    osc3.connect(env);
     env.connect(filter);
     filter.connect(this.master);
     filter.connect(this.delay);
 
     osc1.start(now);
     osc2.start(now);
+    osc3.start(now);
 
     const voice = {
       osc1,
       osc2,
+      osc3,
       env,
       filter,
       vibratoLfo,
@@ -159,7 +167,7 @@ export class SynthEngine {
         osc.disconnect();
       } catch {}
       ended++;
-      if (ended >= 2) {
+      if (ended >= 3) {
         try {
           env.disconnect();
           filter.disconnect();
@@ -168,6 +176,7 @@ export class SynthEngine {
     };
     osc1.onended = cleanup(osc1);
     osc2.onended = cleanup(osc2);
+    osc3.onended = cleanup(osc3);
 
     voice.glideTo = (targetFreq, glideTime = 0.07) => {
       if (voice.released) return;
@@ -177,6 +186,7 @@ export class SynthEngine {
 
       voice.osc1.frequency.setTargetAtTime(tf, t, tc);
       voice.osc2.frequency.setTargetAtTime(tf * 0.5, t, tc);
+      voice.osc3.frequency.setTargetAtTime(tf * 3, t, tc);
       voice.freq = tf;
     };
 
@@ -191,6 +201,7 @@ export class SynthEngine {
 
       voice.osc1.stop(t + 1.2);
       voice.osc2.stop(t + 1.2);
+      voice.osc3.stop(t + 1.2);
       voice.vibratoLfo.stop(t + 1.2);
     };
 
@@ -205,6 +216,7 @@ export class SynthEngine {
 
       voice.osc1.stop(t + 0.06);
       voice.osc2.stop(t + 0.06);
+      voice.osc3.stop(t + 0.06);
       voice.vibratoLfo.stop(t + 0.06);
     };
 
