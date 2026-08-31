@@ -441,7 +441,7 @@ export class FluidSim {
     }
 
     // lowered from 200*s to 50*s
-    this.addDensityBlob(gx, gy, rgb[0], rgb[1], rgb[2], 12 * s, 4);
+    this.addDensityBlob(gx, gy, rgb[0], rgb[1], rgb[2], 50 * s, 4);
   }
 
   resize(canvasWidth, canvasHeight, dpr = 1) {
