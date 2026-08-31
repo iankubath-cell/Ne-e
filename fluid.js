@@ -440,7 +440,7 @@ export class FluidSim {
       rgb = [1.0, 0.6, 0.3];
     }
 
-    // lowered from 200*s to 12*s
+    // lowered from 200*s to 50*s
     this.addDensityBlob(gx, gy, rgb[0], rgb[1], rgb[2], 12 * s, 4);
   }
 
@@ -481,7 +481,7 @@ export class FluidSim {
       px[p] = r | 0;
       px[p + 1] = g | 0;
       px[p + 2] = b | 0;
-      px[p + 3] = clamp((r + g + b) * 0.22, 0, 255) | 0;
+      px[p + 3] = clamp((r + g + b) * 0.75, 0, 255) | 0;
     }
 
     this._renderCtx.putImageData(this._imageData, 0, 0);

@@ -83,8 +83,9 @@ function initialSplash() {
 }
 
 // Initial setup
-resizeCanvasToViewport();
-initialSplash();
+setTimeout(() => {
+  initialSplash();
+}, 200);
 
 window.addEventListener("resize", scheduleResize);
 
