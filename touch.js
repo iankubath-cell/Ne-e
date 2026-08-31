@@ -55,7 +55,17 @@ export class TouchHandler {
     }
   }
 
+  _debugLog(label, e) {
+    if (window.__neeDebug) {
+      console.log(`[touch] ${label}`, {
+        pointerId: e.pointerId,
+        activeCount: this.pointers.size,
+      });
+    }
+  }
+
   _handlePointerDown(e) {
+    this._debugLog("pointerdown", e);
     e.preventDefault();
     this._rectCache = this.target.getBoundingClientRect();
 
@@ -85,6 +95,7 @@ export class TouchHandler {
   }
 
   _handlePointerMove(e) {
+    this._debugLog("pointermove", e);
     e.preventDefault();
     const p = this.pointers.get(e.pointerId);
     if (!p) return;
@@ -122,14 +133,21 @@ export class TouchHandler {
   }
 
   _handlePointerUp(e) {
+    this._debugLog("pointerup", e);
     this._finalizePointer(e);
   }
 
   _handlePointerCancel(e) {
+    this._debugLog("pointercancel", e);
     this._finalizePointer(e);
   }
 
   _handlePointerLeave(e) {
+    this._debugLog("pointerleave", e);
+    // Avoid dropping fingers on Android/browser retargeting quirks while captured.
+    if (this.target.hasPointerCapture?.(e.pointerId)) {
+      return;
+    }
     this._finalizePointer(e);
   }
 
