@@ -22,6 +22,11 @@ if (!ctx) {
   throw new Error("2D context could not be initialized.");
 }
 
+// Allow ?debug=1 to enable debug logging/markers without devtools
+if (location.search.includes("debug")) {
+  window.__neeDebug = true;
+}
+
 // Keep only gesture blocking for iOS pinch-zoom
 const prevent = (e) => e.preventDefault();
 ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
@@ -70,15 +75,15 @@ function initialSplash() {
   const cy = canvas.clientHeight * 0.5;
 
   const blobs = [
-    { x: cx - canvas.clientWidth * 0.08, y: cy, color: [1, 0.42, 0.29] }, // orange
-    { x: cx + canvas.clientWidth * 0.08, y: cy - canvas.clientHeight * 0.03, color: [0.29, 0.62, 1] }, // blue
-    { x: cx, y: cy + canvas.clientHeight * 0.08, color: [1, 0.42, 0.8] }, // magenta
+    { x: cx - canvas.clientWidth * 0.18, y: cy, color: [1, 0.42, 0.29] }, // orange
+    { x: cx + canvas.clientWidth * 0.18, y: cy - canvas.clientHeight * 0.08, color: [0.29, 0.62, 1] }, // blue
+    { x: cx, y: cy + canvas.clientHeight * 0.18, color: [1, 0.42, 0.8] }, // magenta
   ];
 
   for (const b of blobs) {
-    const dx = (Math.random() * 2 - 1) * 16;
-    const dy = (Math.random() * 2 - 1) * 16;
-    fluid.addForce(b.x, b.y, dx, dy, 2.0, b.color);
+    const dx = (Math.random() * 2 - 1) * 40;
+    const dy = (Math.random() * 2 - 1) * 40;
+    fluid.addForce(b.x, b.y, dx, dy, 4.0, b.color);
   }
 }
 

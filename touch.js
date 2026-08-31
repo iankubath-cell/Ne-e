@@ -97,6 +97,11 @@ export class TouchHandler {
     };
 
     this.pointers.set(e.pointerId, p);
+
+    if (typeof window !== "undefined" && window.__neeDebug) {
+      console.log("[touch] pointerdown", { x: p.x, y: p.y, dx: 0, dy: 0, color: p.colorHex });
+    }
+
     this._emitMove(p.x, p.y, 0, 0, p.color);
   }
 
@@ -111,6 +116,10 @@ export class TouchHandler {
 
     p.x = x;
     p.y = y;
+
+    if (typeof window !== "undefined" && window.__neeDebug) {
+      console.log("[touch] pointermove", { x, y, dx, dy, color: p.colorHex });
+    }
 
     this._emitMove(x, y, dx, dy, p.color);
 

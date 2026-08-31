@@ -4,7 +4,7 @@ const DEFAULT_GRID_H = 192;
 const VISCOSITY = 0.00005;
 const DIFFUSION = 0.00008;
 const VELOCITY_FADE = 0.99;
-const DENSITY_FADE = 0.992;
+const DENSITY_FADE = 0.988;
 const SOLVER_ITER = 10;
 const EPS = 1e-6;
 
@@ -372,13 +372,27 @@ export class FluidSim {
       this.density[i] *= this.densityFade;
     }
 
+    // Clear density on the outer border to avoid a lingering edge-line artefact
+    for (let i = 0; i < this.GRID_W; i++) {
+      const top = this.IX(i, 0) * 3;
+      const bot = this.IX(i, this.GRID_H - 1) * 3;
+      this.density[top] = this.density[top + 1] = this.density[top + 2] = 0;
+      this.density[bot] = this.density[bot + 1] = this.density[bot + 2] = 0;
+    }
+    for (let j = 0; j < this.GRID_H; j++) {
+      const left = this.IX(0, j) * 3;
+      const right = this.IX(this.GRID_W - 1, j) * 3;
+      this.density[left] = this.density[left + 1] = this.density[left + 2] = 0;
+      this.density[right] = this.density[right + 1] = this.density[right + 2] = 0;
+    }
+
     // Keep final cleanup pass
     this._sanitizeScalarField(this.vx);
     this._sanitizeScalarField(this.vy);
     this._sanitizeDensityField(this.density);
   }
 
-  addDensityBlob(gridX, gridY, r, g, b, amount = 200, radius = 4) {
+  addDensityBlob(gridX, gridY, r, g, b, amount = 200, radius = 8) {
     const gx = clamp(Math.round(safeNumber(gridX, 0)), 1, this.GRID_W - 2);
     const gy = clamp(Math.round(safeNumber(gridY, 0)), 1, this.GRID_H - 2);
 
@@ -440,8 +454,14 @@ export class FluidSim {
       rgb = [1.0, 0.6, 0.3];
     }
 
-    // lowered from 200*s to 50*s
-    this.addDensityBlob(gx, gy, rgb[0], rgb[1], rgb[2], 50 * s, 4);
+    if (typeof window !== "undefined" && window.__neeDebug) {
+      console.log("[fluid] addForce", {
+        cssX: xCss, cssY: yCss, dx: ddx, dy: ddy, gx, gy, color: rgb,
+      });
+      this._debugMarker = { x: xCss, y: yCss, gx, gy };
+    }
+
+    this.addDensityBlob(gx, gy, rgb[0], rgb[1], rgb[2], 60 * s, 8);
   }
 
   resize(canvasWidth, canvasHeight, dpr = 1) {
@@ -474,9 +494,9 @@ export class FluidSim {
       const d = i * 3;
       const p = i * 4;
 
-      const r = clamp(this.density[d] * 0.7, 0, 255);
-      const g = clamp(this.density[d + 1] * 0.7, 0, 255);
-      const b = clamp(this.density[d + 2] * 0.7, 0, 255);
+      const r = clamp(this.density[d] * 1.0, 0, 255);
+      const g = clamp(this.density[d + 1] * 1.0, 0, 255);
+      const b = clamp(this.density[d + 2] * 1.0, 0, 255);
 
       px[p] = r | 0;
       px[p + 1] = g | 0;
@@ -494,5 +514,15 @@ export class FluidSim {
     ctx.globalCompositeOperation = "lighter";
     ctx.drawImage(this._renderCanvas, 0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.restore();
+
+    if (typeof window !== "undefined" && window.__neeDebug && this._debugMarker) {
+      const dpr = this.dpr || 1;
+      ctx.save();
+      ctx.fillStyle = "#ff00ff";
+      ctx.beginPath();
+      ctx.arc(this._debugMarker.x * dpr, this._debugMarker.y * dpr, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 }
