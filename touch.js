@@ -1,16 +1,16 @@
-const PALETTE = ["#FF6B4A", "#4A9FFF", "#FFD93D", "#6BCB77", "#FF6BCB", "#4AFFD9"];
-
 export class TouchHandler {
   /**
    * @param {HTMLElement} target
-   * @param {{ onMove?: (x:number, y:number, dx:number, dy:number, color:string|number[])=>void }} callbacks
+   * @param {{
+   *   onStart?: (x:number, y:number, pointerId:number)=>void,
+   *   onMove?: (x:number, y:number, dx:number, dy:number, pointerId:number)=>void,
+   *   onEnd?: (pointerId:number)=>void
+   * }} callbacks
    */
   constructor(target, callbacks = {}) {
     this.target = target;
     this.callbacks = callbacks;
     this.pointers = new Map();
-    this._paletteIndex = 0;
-
     this._rectCache = null;
 
     this._onPointerDown = this._handlePointerDown.bind(this);
@@ -32,27 +32,12 @@ export class TouchHandler {
     window.addEventListener("orientationchange", this._onResize);
   }
 
-  _nextColor() {
-    const color = PALETTE[this._paletteIndex % PALETTE.length];
-    this._paletteIndex += 1;
-    return color;
-  }
-
-  _hexToRgb(hex) {
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
-    return [r, g, b];
-  }
-
   _invalidateRectCache() {
     this._rectCache = null;
   }
 
   _getRect() {
-    if (!this._rectCache) {
-      this._rectCache = this.target.getBoundingClientRect();
-    }
+    if (!this._rectCache) this._rectCache = this.target.getBoundingClientRect();
     return this._rectCache;
   }
 
@@ -64,16 +49,14 @@ export class TouchHandler {
     };
   }
 
-  _emitMove(x, y, dx, dy, color) {
+  _emitMove(x, y, dx, dy, pointerId) {
     if (typeof this.callbacks.onMove === "function") {
-      this.callbacks.onMove(x, y, dx, dy, color);
+      this.callbacks.onMove(x, y, dx, dy, pointerId);
     }
   }
 
   _handlePointerDown(e) {
     e.preventDefault();
-
-    // refresh rect cache at start of interaction
     this._rectCache = this.target.getBoundingClientRect();
 
     if (this.target.setPointerCapture) {
@@ -83,8 +66,6 @@ export class TouchHandler {
     }
 
     const { x, y } = this._toLocalXY(e);
-    const colorHex = this._nextColor();
-    const colorRgb = this._hexToRgb(colorHex);
 
     const p = {
       id: e.pointerId,
@@ -92,17 +73,15 @@ export class TouchHandler {
       y,
       lastX: x,
       lastY: y,
-      color: colorRgb, // normalized RGB [0..1]
-      colorHex,
     };
 
     this.pointers.set(e.pointerId, p);
 
-    if (typeof window !== "undefined" && window.__neeDebug) {
-      console.log("[touch] pointerdown", { x: p.x, y: p.y, dx: 0, dy: 0, color: p.colorHex });
+    if (typeof this.callbacks.onStart === "function") {
+      this.callbacks.onStart(x, y, e.pointerId);
     }
 
-    this._emitMove(p.x, p.y, 0, 0, p.color);
+    this._emitMove(x, y, 0, 0, e.pointerId);
   }
 
   _handlePointerMove(e) {
@@ -117,11 +96,7 @@ export class TouchHandler {
     p.x = x;
     p.y = y;
 
-    if (typeof window !== "undefined" && window.__neeDebug) {
-      console.log("[touch] pointermove", { x, y, dx, dy, color: p.colorHex });
-    }
-
-    this._emitMove(x, y, dx, dy, p.color);
+    this._emitMove(x, y, dx, dy, e.pointerId);
 
     p.lastX = x;
     p.lastY = y;
@@ -129,6 +104,13 @@ export class TouchHandler {
 
   _finalizePointer(e) {
     e.preventDefault();
+
+    const p = this.pointers.get(e.pointerId);
+    if (!p) return;
+
+    if (typeof this.callbacks.onEnd === "function") {
+      this.callbacks.onEnd(p.id);
+    }
 
     if (this.target.releasePointerCapture) {
       try {
@@ -153,9 +135,11 @@ export class TouchHandler {
 
   _handleVisibilityChange() {
     if (document.visibilityState !== "visible") {
-      // release capture for all active pointers before clearing
-      if (this.target.releasePointerCapture) {
-        for (const pointerId of this.pointers.keys()) {
+      for (const [pointerId, p] of this.pointers.entries()) {
+        if (typeof this.callbacks.onEnd === "function") {
+          this.callbacks.onEnd(p.id);
+        }
+        if (this.target.releasePointerCapture) {
           try {
             this.target.releasePointerCapture(pointerId);
           } catch {}
