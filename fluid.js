@@ -1,5 +1,5 @@
-const DEFAULT_GRID_W = 96;
-const DEFAULT_GRID_H = 192;
+const DEFAULT_GRID_W = 128;
+const DEFAULT_GRID_H = 256;
 
 const VISCOSITY = 0.00005;
 const DIFFUSION = 0.00008;
@@ -511,8 +511,11 @@ export class FluidSim {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
     ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     ctx.globalCompositeOperation = "lighter";
+    ctx.filter = "blur(1.5px)";
     ctx.drawImage(this._renderCanvas, 0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.filter = "none";
     ctx.restore();
 
     if (typeof window !== "undefined" && window.__neeDebug && this._debugMarker) {
