@@ -4,6 +4,7 @@ import { SynthEngine } from "./audio.js";
 import { freqForY, colourForFreq, colourForNote } from "./harmony.js";
 import { DisplayOptimizer } from "./display.js";
 import { VoidCorners } from "./voids.js";
+import { DebugOverlay } from "./debug.js";
 
 const canvas = document.getElementById("app-canvas");
 if (!canvas) throw new Error("Canvas element #app-canvas not found.");
@@ -21,6 +22,7 @@ const synth = new SynthEngine();
 const activeVoices = new Map();
 const display = new DisplayOptimizer(() => resizeCanvasToViewport());
 const voids = new VoidCorners(synth, canvas);
+const debug = new URLSearchParams(location.search).has("debug") ? new DebugOverlay(canvas, voids) : null;
 
 const touch = new TouchHandler(canvas, {
   onStart: (x, y, pointerId) => {
@@ -33,6 +35,7 @@ const touch = new TouchHandler(canvas, {
 
     fluid.addForce(x, y, 0, 0, 1.5, color);
     voids.touchStart(pointerId, x, y, canvas.clientWidth || 1, canvas.clientHeight || 1);
+    debug?.pointer(pointerId, x, y);
   },
 
   onMove: (x, y, dx, dy, pointerId) => {
@@ -47,6 +50,7 @@ const touch = new TouchHandler(canvas, {
       fluid.addForce(x, y, dx, dy, strength, color);
     }
     voids.update(pointerId, x, y, canvas.clientWidth || 1, canvas.clientHeight || 1);
+    debug?.pointer(pointerId, x, y);
   },
 
   onEnd: (pointerId) => {
@@ -56,6 +60,7 @@ const touch = new TouchHandler(canvas, {
       activeVoices.delete(pointerId);
     }
     voids.touchEnd(pointerId);
+    debug?.touchEnd(pointerId);
   },
 });
 
@@ -119,6 +124,7 @@ document.addEventListener("visibilitychange", () => {
       activeVoices.delete(id);
     }
     voids.resetAll();
+    debug?.reset();
   }
 });
 
@@ -138,6 +144,7 @@ function animate(now) {
   fluid.step(dt);
   fluid.render(ctx);
   voids.render(ctx);
+  debug?.render(ctx);
 
   requestAnimationFrame(animate);
 }
@@ -145,5 +152,5 @@ function animate(now) {
 requestAnimationFrame(animate);
 
 if (location.hostname === "localhost") {
-  window.__nee = { fluid, touch, synth, activeVoices, display, voids };
+  window.__nee = { fluid, touch, synth, activeVoices, display, voids, debug };
 }
