@@ -28,13 +28,16 @@ const touch = new TouchHandler(canvas, {
   onStart: (x, y, pointerId) => {
     synth.ensureContext();
 
-    const { freq } = freqForY(y, canvas.clientHeight || 1);
-    const color = colourForFreq(freq);
-    const voice = synth.startVoice(freq);
-    if (voice) activeVoices.set(pointerId, voice);
-
-    fluid.addForce(x, y, 0, 0, 1.5, color);
     voids.touchStart(pointerId, x, y, canvas.clientWidth || 1, canvas.clientHeight || 1);
+    const zoneId = voids.pointerZone.get(pointerId);
+    if (!zoneId) {
+      const { freq } = freqForY(y, canvas.clientHeight || 1);
+      const color = colourForFreq(freq);
+      const voice = synth.startVoice(freq);
+      if (voice) activeVoices.set(pointerId, voice);
+
+      fluid.addForce(x, y, 0, 0, 1.5, color);
+    }
     debug?.pointer(pointerId, x, y);
   },
 

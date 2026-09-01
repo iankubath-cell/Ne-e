@@ -43,13 +43,14 @@ export class DebugOverlay {
       ctx.fillStyle = color;
       ctx.fillText(count ? `${letter}×${count}` : letter, zone.x + 4, zone.y + 4);
     }
+    ctx.lineWidth = 2;
     for (const [id, zoneId] of this.voids.pointerZone) {
       const point = this.pointers.get(id);
       if (!point) continue;
       ctx.strokeStyle = styles[zoneId]?.[0] || "#66aaff";
       ctx.beginPath();
-      ctx.moveTo(point.x - 4, point.y); ctx.lineTo(point.x + 4, point.y);
-      ctx.moveTo(point.x, point.y - 4); ctx.lineTo(point.x, point.y + 4);
+      ctx.moveTo(point.x - 8, point.y); ctx.lineTo(point.x + 8, point.y);
+      ctx.moveTo(point.x, point.y - 8); ctx.lineTo(point.x, point.y + 8);
       ctx.stroke();
     }
     ctx.restore();
