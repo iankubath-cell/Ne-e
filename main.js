@@ -24,21 +24,19 @@ const display = new DisplayOptimizer(() => resizeCanvasToViewport());
 const voids = new VoidCorners(synth, canvas);
 const debug = new URLSearchParams(location.search).has("debug") ? new DebugOverlay(canvas, voids) : null;
 
-const touch = new TouchHandler(canvas, {
+ const touch = new TouchHandler(canvas, {
   onStart: (x, y, pointerId) => {
     synth.ensureContext();
-
     voids.touchStart(pointerId, x, y, canvas.clientWidth || 1, canvas.clientHeight || 1);
-    const zoneId = voids.pointerZone.get(pointerId);
-    if (!zoneId) {
+    debug?.pointer(pointerId, x, y);
+
+    if (!voids.pointerZone.get(pointerId)) {
       const { freq } = freqForY(y, canvas.clientHeight || 1);
       const color = colourForFreq(freq);
       const voice = synth.startVoice(freq);
       if (voice) activeVoices.set(pointerId, voice);
-
       fluid.addForce(x, y, 0, 0, 1.5, color);
     }
-    debug?.pointer(pointerId, x, y);
   },
 
   onMove: (x, y, dx, dy, pointerId) => {
@@ -54,6 +52,16 @@ const touch = new TouchHandler(canvas, {
     }
     voids.update(pointerId, x, y, canvas.clientWidth || 1, canvas.clientHeight || 1);
     debug?.pointer(pointerId, x, y);
+
+    // Late-start: finger born in a corner, now exited — wake it up as a voice.
+    if (!activeVoices.has(pointerId) && !voids.pointerZone.get(pointerId)) {
+      synth.ensureContext();
+      const { freq } = freqForY(y, canvas.clientHeight || 1);
+      const color = colourForFreq(freq);
+      const lateVoice = synth.startVoice(freq);
+      if (lateVoice) activeVoices.set(pointerId, lateVoice);
+      fluid.addForce(x, y, 0, 0, 1.5, color);
+    }
   },
 
   onEnd: (pointerId) => {
@@ -65,7 +73,7 @@ const touch = new TouchHandler(canvas, {
     voids.touchEnd(pointerId);
     debug?.touchEnd(pointerId);
   },
-});
+});;
 
 function resizeCanvasToViewport() {
   const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, display.dprCap));
