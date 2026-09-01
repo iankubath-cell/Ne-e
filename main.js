@@ -2,6 +2,8 @@ import { FluidSim } from "./fluid.js";
 import { TouchHandler } from "./touch.js";
 import { SynthEngine } from "./audio.js";
 import { freqForY, colourForFreq, colourForNote } from "./harmony.js";
+import { DisplayOptimizer } from "./display.js";
+import { VoidCorners } from "./voids.js";
 
 const canvas = document.getElementById("app-canvas");
 if (!canvas) throw new Error("Canvas element #app-canvas not found.");
@@ -17,6 +19,8 @@ const prevent = (e) => e.preventDefault();
 const fluid = new FluidSim();
 const synth = new SynthEngine();
 const activeVoices = new Map();
+const display = new DisplayOptimizer(() => resizeCanvasToViewport());
+const voids = new VoidCorners(synth, canvas);
 
 const touch = new TouchHandler(canvas, {
   onStart: (x, y, pointerId) => {
@@ -28,6 +32,7 @@ const touch = new TouchHandler(canvas, {
     if (voice) activeVoices.set(pointerId, voice);
 
     fluid.addForce(x, y, 0, 0, 1.5, color);
+    voids.touchStart(pointerId, x, y, canvas.clientWidth || 1, canvas.clientHeight || 1);
   },
 
   onMove: (x, y, dx, dy, pointerId) => {
@@ -41,6 +46,7 @@ const touch = new TouchHandler(canvas, {
       const strength = Math.min(2.5, 1 + speed * 0.05);
       fluid.addForce(x, y, dx, dy, strength, color);
     }
+    voids.update(pointerId, x, y, canvas.clientWidth || 1, canvas.clientHeight || 1);
   },
 
   onEnd: (pointerId) => {
@@ -49,11 +55,12 @@ const touch = new TouchHandler(canvas, {
       voice.release();
       activeVoices.delete(pointerId);
     }
+    voids.touchEnd(pointerId);
   },
 });
 
 function resizeCanvasToViewport() {
-  const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+  const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, display.dprCap));
   const cssWidth = Math.max(1, window.innerWidth);
   const cssHeight = Math.max(1, window.innerHeight);
 
@@ -104,15 +111,19 @@ let lastTime = performance.now();
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
     lastTime = performance.now();
+    display.resetSamples();
+    try { synth.ensureContext().catch(() => {}); } catch {}
   } else {
     for (const [id, voice] of activeVoices.entries()) {
       voice.kill();
       activeVoices.delete(id);
     }
+    voids.resetAll();
   }
 });
 
 function animate(now) {
+  const frameMs = now - lastTime;
   const dt = Math.min(0.033, (now - lastTime) / 1000);
   lastTime = now;
 
@@ -122,8 +133,11 @@ function animate(now) {
     }
   }
 
+  voids.apply(Array.from(activeVoices.values()));
+  if (activeVoices.size === 0) display.sample(frameMs);
   fluid.step(dt);
   fluid.render(ctx);
+  voids.render(ctx);
 
   requestAnimationFrame(animate);
 }
@@ -131,5 +145,5 @@ function animate(now) {
 requestAnimationFrame(animate);
 
 if (location.hostname === "localhost") {
-  window.__nee = { fluid, touch, synth, activeVoices };
+  window.__nee = { fluid, touch, synth, activeVoices, display, voids };
 }

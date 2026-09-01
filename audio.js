@@ -8,6 +8,8 @@ export class SynthEngine {
     this.master = null;
     this.delay = null;
     this.feedback = null;
+    this.reverb = null;
+    this.reverbSend = null;
   }
 
   async ensureContext() {
@@ -15,10 +17,14 @@ export class SynthEngine {
     if (!AC) return null;
 
     if (!this.ctx) {
-      this.ctx = new AC();
+      try {
+        this.ctx = new AC({ latencyHint: "interactive" });
+      } catch {
+        this.ctx = new AC();
+      }
 
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.45;
+      this.master.gain.value = 0.45; // restored
       this.master.connect(this.ctx.destination);
 
       this.delay = this.ctx.createDelay(1.0);
@@ -30,6 +36,24 @@ export class SynthEngine {
       this.delay.connect(this.master);
       this.delay.connect(this.feedback);
       this.feedback.connect(this.delay);
+
+      // Procedural reverb (kept)
+      this.reverb = this.ctx.createConvolver();
+      const len = Math.round(this.ctx.sampleRate * 2.5);
+      const ir = this.ctx.createBuffer(2, len, this.ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = ir.getChannelData(ch);
+        for (let i = 0; i < len; i++) {
+          const t = 1 - i / len;
+          d[i] = (Math.random() * 2 - 1) * Math.pow(t, 2.8);
+        }
+      }
+      this.reverb.buffer = ir;
+
+      this.reverbSend = this.ctx.createGain();
+      this.reverbSend.gain.value = 0;
+      this.reverbSend.connect(this.reverb);
+      this.reverb.connect(this.master);
     }
 
     if (this.ctx.state === "suspended") {
@@ -39,60 +63,6 @@ export class SynthEngine {
     return this.ctx;
   }
 
-  noteOn(freq, velocity = 1) {
-    if (!this.ctx || !this.master) return null;
-    if (!Number.isFinite(freq) || freq <= 0) return null;
-
-    const ctx = this.ctx;
-    const now = ctx.currentTime;
-    const vel = clamp(Number.isFinite(velocity) ? velocity : 1, 0, 1.5);
-
-    const env = ctx.createGain();
-    env.gain.cancelScheduledValues(now);
-    env.gain.setValueAtTime(0.0001, now);
-    env.gain.linearRampToValueAtTime(0.25 * vel, now + 0.02);
-    env.gain.exponentialRampToValueAtTime(0.0001, now + 2.5);
-
-    const osc1 = ctx.createOscillator();
-    osc1.type = "sine";
-    osc1.frequency.setValueAtTime(freq, now);
-
-    const osc2 = ctx.createOscillator();
-    osc2.type = "triangle";
-    osc2.frequency.setValueAtTime(freq * 2, now);
-    osc2.detune.setValueAtTime(4, now);
-
-    osc1.connect(env);
-    osc2.connect(env);
-    env.connect(this.master);
-    env.connect(this.delay);
-
-    const stopTime = now + 3.0;
-    let ended = 0;
-    const cleanup = (osc) => () => {
-      try {
-        osc.disconnect();
-      } catch {}
-      ended++;
-      if (ended >= 2) {
-        try {
-          env.disconnect();
-        } catch {}
-      }
-    };
-
-    osc1.onended = cleanup(osc1);
-    osc2.onended = cleanup(osc2);
-
-    osc1.start(now);
-    osc2.start(now);
-    osc1.stop(stopTime);
-    osc2.stop(stopTime);
-
-    return { osc1, osc2, env, startedAt: now, stopAt: stopTime, freq };
-  }
-
-  // PART A: sustained voice API
   startVoice(freq, velocity = 1) {
     if (!this.ctx || !this.master) return null;
     if (!Number.isFinite(freq) || freq <= 0) return null;
@@ -101,82 +71,92 @@ export class SynthEngine {
     const now = ctx.currentTime;
     const vel = clamp(Number.isFinite(velocity) ? velocity : 1, 0, 1.5);
 
+    // Envelope
     const env = ctx.createGain();
     env.gain.cancelScheduledValues(now);
     env.gain.setValueAtTime(0.0001, now);
-    env.gain.linearRampToValueAtTime(0.18 * vel, now + 0.1); // hold after attack
+    env.gain.linearRampToValueAtTime(0.18 * vel, now + 0.1);
 
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    const cutoff = 600 + freq * 2.5; // low notes: ~780 Hz, high notes: ~2700 Hz
-    filter.frequency.setValueAtTime(cutoff, now);
-    filter.Q.setValueAtTime(0.7, now);
-
-    const osc1 = ctx.createOscillator();
+    // Warm voice: 3 oscillators
+    const osc1 = ctx.createOscillator(); // sine at freq
     osc1.type = "sine";
     osc1.frequency.setValueAtTime(freq, now);
 
-    const osc2 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator(); // sine sub-octave
     osc2.type = "sine";
     osc2.frequency.setValueAtTime(freq * 0.5, now);
 
-    const osc3 = ctx.createOscillator();
+    const osc3 = ctx.createOscillator(); // triangle third harmonic
     osc3.type = "triangle";
-    osc3.frequency.setValueAtTime(freq * 3, now); // third harmonic — fills midrange on low notes
+    osc3.frequency.setValueAtTime(freq * 3, now);
 
+    // Vibrato: LFO -> depth (cents) -> detune of osc1/osc2
     const vibratoLfo = ctx.createOscillator();
     vibratoLfo.type = "sine";
     vibratoLfo.frequency.setValueAtTime(5.5, now);
 
     const vibratoDepth = ctx.createGain();
     vibratoDepth.gain.setValueAtTime(0, now);
-    vibratoDepth.gain.linearRampToValueAtTime(4, now + 0.5);
+    vibratoDepth.gain.linearRampToValueAtTime(4, now + 0.5); // cents
 
     vibratoLfo.connect(vibratoDepth);
     vibratoDepth.connect(osc1.detune);
     vibratoDepth.connect(osc2.detune);
-    vibratoLfo.start(now);
+
+    // Filter chain: env -> lowpass -> sends
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(600 + freq * 2.5, now);
+    filter.Q.setValueAtTime(0.7, now);
 
     osc1.connect(env);
     osc2.connect(env);
     osc3.connect(env);
+
     env.connect(filter);
     filter.connect(this.master);
     filter.connect(this.delay);
+    if (this.reverbSend) filter.connect(this.reverbSend);
 
     osc1.start(now);
     osc2.start(now);
     osc3.start(now);
+    vibratoLfo.start(now);
 
     const voice = {
       osc1,
       osc2,
       osc3,
       env,
-      filter,
-      vibratoLfo,
-      vibratoDepth,
       freq,
       startTime: now,
       released: false,
+      filter,
+      vibratoLfo,
+      vibratoDepth,
     };
 
-    let ended = 0;
-    const cleanup = (osc) => () => {
-      try {
-        osc.disconnect();
-      } catch {}
-      ended++;
-      if (ended >= 3) {
-        try {
-          env.disconnect();
-          filter.disconnect();
-        } catch {}
+    let endedCount = 0;
+    const maybeCleanup = () => {
+      endedCount += 1;
+      if (endedCount >= 4) {
+        try { env.disconnect(); } catch {}
+        try { filter.disconnect(); } catch {}
+        try { vibratoDepth.disconnect(); } catch {}
       }
     };
-    osc1.onended = cleanup(osc1);
-    osc2.onended = cleanup(osc2);
-    osc3.onended = cleanup(osc3);
+
+    const bindEnded = (node) => {
+      node.onended = () => {
+        try { node.disconnect(); } catch {}
+        maybeCleanup();
+      };
+    };
+
+    bindEnded(osc1);
+    bindEnded(osc2);
+    bindEnded(osc3);
+    bindEnded(vibratoLfo);
 
     voice.glideTo = (targetFreq, glideTime = 0.07) => {
       if (voice.released) return;
@@ -224,8 +204,25 @@ export class SynthEngine {
   }
 
   setVolume(v) {
-    if (!this.master || !this.ctx) return;
-    const vol = clamp(Number.isFinite(v) ? v : 0.5, 0, 1);
-    this.master.gain.setValueAtTime(vol, this.ctx.currentTime);
+    if (!this.ctx || !this.master) return;
+    this.master.gain.setTargetAtTime(clamp(v, 0, 1), this.ctx.currentTime, 0.05);
+  }
+
+  setReverb(amount) {
+    if (!this.ctx || !this.reverbSend) return;
+    const a = clamp(Number.isFinite(amount) ? amount : 0, 0, 1);
+    this.reverbSend.gain.setTargetAtTime(a * 0.35, this.ctx.currentTime, 0.15);
+  }
+
+  setDelayDepth(on) {
+    if (!this.ctx || !this.feedback || !this.delay) return;
+    const t = this.ctx.currentTime;
+    if (on) {
+      this.feedback.gain.setTargetAtTime(0.45, t, 0.15);
+      this.delay.delayTime.setTargetAtTime(0.62, t, 0.15);
+    } else {
+      this.feedback.gain.setTargetAtTime(0.22, t, 0.15);
+      this.delay.delayTime.setTargetAtTime(0.4, t, 0.15);
+    }
   }
 }
