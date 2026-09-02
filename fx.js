@@ -5,6 +5,7 @@ export class CornerFX {
     this.trail = [];
     this.pointers = new Map();
     this.zones = new Map();
+    this.filaments = [];
     this.dust = Array.from({ length: 40 }, () => this._dust(true));
     this.ramps = { vibrato: 0, reverb: 0, filter: 0, delay: 0 };
   }
@@ -77,25 +78,42 @@ export class CornerFX {
       particle.y += particle.speed * dtMs / 1000;
       if (particle.y > h) Object.assign(particle, this._dust());
     }
+    for (const filament of this.filaments) filament.life -= dtMs / 250;
+    this.filaments = this.filaments.filter((filament) => filament.life > 0);
 
     ctx.save();
     ctx.scale(sx, sy);
     if (this.ramps.vibrato > 0) {
       ctx.globalCompositeOperation = "lighter";
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 2;
       for (const [pointerId, pointer] of this.pointers) if (this.zones.get(pointerId) === "vibrato") {
-        for (let n = 0; n < 6; n++) {
+        for (let n = 0; n < 2; n++) {
           const angle = Math.random() * Math.PI * 2;
           const length = 20 + Math.random() * 40;
+          const midpoint = {
+            x: pointer.x + Math.cos(angle) * length * 0.45 + (Math.random() - 0.5) * 5,
+            y: pointer.y + Math.sin(angle) * length * 0.45 + (Math.random() - 0.5) * 5,
+          };
           const ex = pointer.x + Math.cos(angle) * length;
           const ey = pointer.y + Math.sin(angle) * length;
-          ctx.strokeStyle = `rgba(200,180,255,${0.15 + Math.random() * 0.35})`;
-          ctx.beginPath(); ctx.moveTo(pointer.x, pointer.y);
-          ctx.lineTo(pointer.x + Math.cos(angle) * length * 0.45 + (Math.random() - 0.5) * 5, pointer.y + Math.sin(angle) * length * 0.45 + (Math.random() - 0.5) * 5);
-          ctx.lineTo(ex, ey); ctx.stroke();
-          if (n < 3) this.fluid.addForce(ex, ey, Math.cos(angle) * 2, Math.sin(angle) * 2, 0.6, "rgba(200,180,255,0.7)");
+          this.filaments.push({
+            segments: [{ x: pointer.x, y: pointer.y }, midpoint, { x: ex, y: ey }],
+            life: 1,
+            seedColour: "200,180,255",
+          });
+          this.fluid.addForce(ex, ey, Math.cos(angle) * 2, Math.sin(angle) * 2, 0.9, [0.78, 0.7, 1]);
         }
       }
+    }
+    if (this.filaments.length > 30) this.filaments.splice(0, this.filaments.length - 30);
+    ctx.globalCompositeOperation = "lighter";
+    for (const filament of this.filaments) {
+      ctx.strokeStyle = `rgba(${filament.seedColour},${0.45 * filament.life})`;
+      ctx.beginPath();
+      ctx.moveTo(filament.segments[0].x, filament.segments[0].y);
+      ctx.lineTo(filament.segments[1].x, filament.segments[1].y);
+      ctx.lineTo(filament.segments[2].x, filament.segments[2].y);
+      ctx.stroke();
     }
     const recent = this.trail.filter((sample) => now - sample.t <= 800);
     if (recent.length > 1 && (this.ramps.reverb > 0 || this.ramps.delay > 0)) {
@@ -114,5 +132,5 @@ export class CornerFX {
     ctx.restore();
   }
 
-  reset() { this.trail.length = 0; this.pointers.clear(); this.zones.clear(); this.ramps = { vibrato: 0, reverb: 0, filter: 0, delay: 0 }; }
+  reset() { this.trail.length = 0; this.filaments.length = 0; this.pointers.clear(); this.zones.clear(); this.ramps = { vibrato: 0, reverb: 0, filter: 0, delay: 0 }; }
 }
