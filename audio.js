@@ -102,6 +102,7 @@ export class SynthEngine {
     vibratoLfo.connect(vibratoDepth);
     vibratoDepth.connect(osc1.detune);
     vibratoDepth.connect(osc2.detune);
+    vibratoDepth.connect(osc3.detune);
 
     // Filter chain: env -> lowpass -> sends
     const filter = ctx.createBiquadFilter();

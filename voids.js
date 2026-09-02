@@ -88,7 +88,7 @@ export class VoidCorners {
       if (!v || v.released) continue;
 
       if (v.vibratoDepth?.gain && v.vibratoLfo?.frequency) {
-        v.vibratoDepth.gain.setTargetAtTime(vibratoOn ? 10 : 4, now, 0.15);
+        v.vibratoDepth.gain.setTargetAtTime(vibratoOn ? 30 : 4, now, 0.15);
         v.vibratoLfo.frequency.setTargetAtTime(vibratoOn ? 6.5 : 5.5, now, 0.15);
       }
 
