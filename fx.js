@@ -87,21 +87,24 @@ export class CornerFX {
       ctx.globalCompositeOperation = "lighter";
       ctx.lineWidth = 2;
       for (const [pointerId, pointer] of this.pointers) if (this.zones.get(pointerId) === "vibrato") {
+        const origin = this.trail[this.trail.length - 1] || pointer;
         for (let n = 0; n < 2; n++) {
           const angle = Math.random() * Math.PI * 2;
           const length = 20 + Math.random() * 40;
           const midpoint = {
-            x: pointer.x + Math.cos(angle) * length * 0.45 + (Math.random() - 0.5) * 5,
-            y: pointer.y + Math.sin(angle) * length * 0.45 + (Math.random() - 0.5) * 5,
+            x: origin.x + Math.cos(angle) * length * 0.45 + (Math.random() - 0.5) * 5,
+            y: origin.y + Math.sin(angle) * length * 0.45 + (Math.random() - 0.5) * 5,
           };
-          const ex = pointer.x + Math.cos(angle) * length;
-          const ey = pointer.y + Math.sin(angle) * length;
+          const ex = origin.x + Math.cos(angle) * length;
+          const ey = origin.y + Math.sin(angle) * length;
           this.filaments.push({
-            segments: [{ x: pointer.x, y: pointer.y }, midpoint, { x: ex, y: ey }],
+            segments: [{ x: origin.x, y: origin.y }, midpoint, { x: ex, y: ey }],
             life: 1,
             seedColour: "200,180,255",
           });
-          this.fluid.addForce(ex, ey, Math.cos(angle) * 2, Math.sin(angle) * 2, 0.9, [0.78, 0.7, 1]);
+          for (let burst = 0; burst < 2; burst++) {
+            this.fluid.addForce(pointer.x, pointer.y, Math.cos(angle) * 2, Math.sin(angle) * 2, 0.9, [0.78, 0.7, 1]);
+          }
         }
       }
     }
@@ -120,9 +123,28 @@ export class CornerFX {
       ctx.globalCompositeOperation = "lighter";
       for (let i = 1; i < recent.length; i++) {
         const age = (now - recent[i].t) / 800;
-        ctx.strokeStyle = this._color(recent[i].color, 0.05 + (1 - age) * (this.ramps.reverb > 0 ? 0.25 : 0.45));
+        const alpha = 0.05 + (1 - age) * (this.ramps.reverb > 0 ? 0.25 : 0.45);
+        const previous = recent[i - 1];
+        const current = recent[i];
+        ctx.strokeStyle = this._color(current.color, alpha);
         ctx.lineWidth = this.ramps.delay > 0 ? 1 + (1 - age) * 4 : 1.5;
-        ctx.beginPath(); ctx.moveTo(recent[i - 1].x, recent[i - 1].y); ctx.lineTo(recent[i].x, recent[i].y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(previous.x, previous.y); ctx.lineTo(current.x, current.y); ctx.stroke();
+        if (this.ramps.reverb > 0) {
+          const dx = current.x - previous.x;
+          const dy = current.y - previous.y;
+          const length = Math.hypot(dx, dy) || 1;
+          const nx = -dy / length;
+          const ny = dx / length;
+          for (let k = 1; k <= 2; k++) {
+            const offset = (Math.random() - 0.5) * 14 * k;
+            ctx.strokeStyle = this._color(current.color, alpha * (k === 1 ? 0.4 : 0.2));
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(previous.x + nx * offset, previous.y + ny * offset);
+            ctx.lineTo(current.x + nx * offset, current.y + ny * offset);
+            ctx.stroke();
+          }
+        }
       }
     }
     if (this.ramps.filter > 0) {
